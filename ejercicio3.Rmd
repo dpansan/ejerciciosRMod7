@@ -1,0 +1,114 @@
+---
+title: "Ejercicio 3. Web scraping, texto y fechas."
+author: "Diego Paniagua"
+date: "12/01/2015"
+output: html_document
+---
+
+
+
+### Enunciado: ###
+
+*Descarga información bursátil de http://goo.gl/yD2Bwb y crea un data.frame a partir de él con la misma
+información que en la tabla que aparece en la página. Convierte las columnas numéricas a número, etc., las
+fechas a fecha, etc.
+Ten en cuenta que la columna hora puede tener dos tipos de información: la hora durante las horas de
+operación de los mercados y el día en formato dd/mm/aaaa fuera de mercado. Que tu código tenga en cuenta
+esa circunstancia.
+Alternativamente, si encuentras algunos datos de tu interés que te interese procesar y tengan un nivel de
+dificulad similar al anterior, úsalos en lugar de los propuestos.
+El código que envíes tiene que ser capaz de crear la tabla a la hora en que lo ejecute.*
+
+
+
+### Resolución del ejercicio: ###
+
+
+Para solucionar las dudas que me han surgido en este ejercicio he recurrido a los slices de los anteiores módulos y a Stackoverflow.com, ya que la mayoría eran dudas comunes y sencillas.
+
+```{r}
+#Cargo la librería XML
+library(XML)
+
+# Descargo el fichero 
+url.ibex <- "http://goo.gl/yD2Bwb"
+
+# Como la web contiene dos tablas, uso la función readHTMLTable para cargarlas en una lista
+tablas   <- readHTMLTable(url.ibex,header=TRUE)
+
+#La tabla con la que me quedo es la segunda. Observo si la cabecera está Ok.
+#names(tablas[[2]])
+
+#Elimino los tabuladores y los asteriscos de la cabecera de los datos 
+names(tablas[[2]])<-gsub("\n", "", as.character(names(tablas[[2]])) )
+names(tablas[[2]])<-gsub("\\*", "", as.character(names(tablas[[2]])) )
+
+#Le asigno la tabla a una nueva variable para trabajar mas comodo
+ibex35.df<-tablas[[2]]
+
+#Elimino la columna que está en blanco
+ibex35.df[5]<- NULL
+
+#Examino las columnas para ver los tipos de datos
+#str (ibex35.df) #Son todos factor, los convierto uno a uno en su tipo
+#Además, las cifras con coma decimal serán cambiados por puntos y los puntos de miles eliminados
+#También he eliminado espacios y acentos en los nombres de columnas para que sean mas usables
+
+#TKR
+ibex35.df$TKR= as.character(ibex35.df$TKR)
+
+#Último
+ibex35.df$Último<-gsub(",", "\\.", as.character(ibex35.df$Último) )
+ibex35.df$Último= as.numeric(ibex35.df$Último)
+names(ibex35.df)[names(ibex35.df)=="Último"] <- "Ultimo"
+
+#Dif.
+ibex35.df$Dif.<-gsub(",", "\\.", as.character(ibex35.df$Dif.) )
+ibex35.df$Dif.= as.numeric(ibex35.df$Dif.)
+
+#Dif. %
+ibex35.df$"Dif. %"<-gsub(",", "\\.", as.character(ibex35.df$"Dif. %") )
+ibex35.df$"Dif. %"= as.numeric(ibex35.df$"Dif. %")
+names(ibex35.df)[names(ibex35.df)=="Dif. %"] <- "Dif.%"
+
+#Max.
+ibex35.df$Max.<-gsub(",", "\\.", as.character(ibex35.df$Max.) )
+ibex35.df$Max.= as.numeric(ibex35.df$Max.)
+
+#Min.
+ibex35.df$Min.<-gsub(",", "\\.", as.character(ibex35.df$Min.) )
+ibex35.df$Min.= as.numeric(ibex35.df$Min.)
+
+#Volumen
+ibex35.df$Volumen<-gsub("\\.", "", as.character(ibex35.df$Volumen) )
+ibex35.df$Volumen= as.numeric(ibex35.df$Volumen)
+
+#Capital
+ibex35.df$Capital<-gsub("\\.", "", as.character(ibex35.df$Capital) )
+ibex35.df$Capital= as.numeric(ibex35.df$Capital)
+
+#RT/Div
+#Para la columna RT/Div, al ser % lo dejo como la otra Dif. %, es decir: le añado el "%" a la cabecera y lo quito de los datos.
+#Los n.a pasarán a ser NA
+ibex35.df$"Rt/Div"<-gsub(",", "\\.", as.character(ibex35.df$"Rt/Div") )
+ibex35.df$"Rt/Div"<-gsub("%", "", as.character(ibex35.df$"Rt/Div") )
+ibex35.df$"Rt/Div"= as.numeric(ibex35.df$"Rt/Div")
+names(ibex35.df)[names(ibex35.df)=="Rt/Div"] <- "Rt/Div%"
+
+#PER
+ibex35.df$PER<-gsub(",", "\\.", as.character(ibex35.df$PER) )
+ibex35.df$PER= as.numeric(ibex35.df$PER)
+
+#Hora
+#Compruebo si es una fecha el primero de los datos ya que todos serán iguales, o fecha u hora.
+res<-as.Date(as.character(ibex35.df[1,11]),format="%d/%m/%Y")
+
+#Si el dato era fecha, lo formateo como fecha, si no lo era, lo formateo como hora.
+if (is.na(res)) ibex35.df$Hora= as.character(ibex35.df$Hora,"%H:%M:%S") else ibex35.df$Hora= as.Date(ibex35.df$Hora,format="%d/%m/%Y")
+
+#Ya tendríamos el data.frame completo para poder tratarlo.
+#str(ibex35.df)
+ibex35.df
+
+```
+

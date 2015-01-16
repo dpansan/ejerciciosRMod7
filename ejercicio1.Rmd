@@ -1,0 +1,88 @@
+---
+title: "Ejercicio 1. Ocho apellidos españoles"
+author: "Diego Paniagua"
+date: "12/01/2015"
+output: html_document
+---
+
+
+
+
+### Enunciado: ###
+
+*Obtén shapefiles de, p.e., provincias españolas (el INE los proporciona). Luego, obtén datos de algún tipo de
+estadística asociada a dichas entidades (población, tasa de desempleo, etc.). Con esos dos elementos, crea un
+SpatialPolygonsDataFrame y represéntalos gráficamente.
+Trata de hacerlo reproduciblemente (¿con R MarkDown?).*
+
+### Resolución del ejercicio: ###
+
+La idea para este ejercicio la obtuve googleando. Acabé en la siguiente URL: 
+
+https://envejecimientoenred.wordpress.com/2014/07/16/ocho-apellidos-espanoles/
+
+La idea principal del estudio y citándolo textualemente es: "Los ocho apellidos más frecuentes (como primer apellido) son por este orden: García, González, Rodríguez, Fernández, López, Martínez, Sánchez y Pérez "
+
+En ella, entre otras cosas exponen la distribución por provincias de estos apellidos, la tabla en concreto en la que figuran estos datos y que me ha servido para el ejercicio ha sido la siguiente:
+
+https://envejecimientoenred.files.wordpress.com/2014/07/tabla-2-porcentaje-en-cada-provincia-del-conjunto-de-los-ocho-apellidos-mc3a1s-frecuentes-de-espac3b1a-2013.jpg
+
+A partir de esa imagen, con un programa OCR extraje los datos a texto y modificandolo ligeramente lo almacené en porcentajeapellidos.csv.
+
+
+Por otro lado, como dice el enunciado, descargué el shapefile del mapa de España de la web del INE.
+
+----------------------------------------------------------------
+
+
+```{r}
+#Cargo el paquete rgdal y establezco el directorio de trabajo
+
+library(rgdal)
+
+
+#Cargo el fichero shape del mapa de España por provincias, descargado del INE.
+
+provincias <- readOGR(dsn = "provincias_shp", "Provincias",stringsAsFactors=FALSE)
+#Compruebo su clase
+class(provincias)
+#Un objeto de la clase S4 tiene "slots", que son las variables del objeto. Muestro sus slots. 
+slotNames(provincias)
+
+#El slot más importante de este tipo de clases es "data". Lo muestro.
+provincias@data
+
+#Vamos con el fichero de datos. Le hago una serie de transformaciones para adaptarlo a mis necesidades:
+
+#Cargo el fichero de datos. En el figura el nombre de la provincia, el dato del % de apellidos y el código de la provincia.
+apellidos<-read.table(file="porcentajeapellidos.csv",sep=";")
+
+#Como el data frame del mapa tiene los códigos de provincia del 1 al 10 con dos digitos, se los añado al de apellidos
+paso1<-do.call("paste", c('0',apellidos[c('V3')],sep=""))
+apellidos$V3<-substr(paso1, nchar(paso1)-1, nchar(paso1))
+
+#Uno los dataframes para añadir la columna del %
+union<-merge(x = provincias@data, y = apellidos, by.x = "COD_PROV", by.y="V3",all = TRUE)
+
+#Elimino la columna que no me sirve
+union$V1<- NULL
+
+#Asigno la unión a una nueva variable mas descriptiva
+mapacondatos<-union
+#Renombro la nueva variable
+names(mapacondatos)[names(mapacondatos)=="V2"] <- "PORC.8APELLIDOS"
+#Elimino la fila que tiene NA (venian datos de España)
+mapacondatos<-mapacondatos[complete.cases(mapacondatos),]
+#Elimino el % de los datos 
+mapacondatos$PORC.8APELLIDOS<-gsub("%", "", as.character(mapacondatos$PORC.8APELLIDOS) )
+#Cambio las comas por puntos
+mapacondatos$PORC.8APELLIDOS<-gsub(",", ".", as.character(mapacondatos$PORC.8APELLIDOS) )
+#Paso a numerico el %
+mapacondatos<-transform(mapacondatos, PORC.8APELLIDOS = as.numeric(PORC.8APELLIDOS))
+
+
+#Reasigno los datos ya con la columna del % incluida
+provincias@data<-mapacondatos
+#Pinto el mapa, el col=... le indica un vector de colores, por lo que las provincias con un valor similar deberían tener un color similar
+plot(provincias, col = provincias$PORC.8APELLIDOS)
+```

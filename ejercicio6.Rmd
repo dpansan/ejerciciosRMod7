@@ -1,0 +1,50 @@
+---
+title: "Ejercicio 6. Creación de paquetes y Github."
+author: "Diego Paniagua"
+date: "12/01/2015"
+output: html_document
+---
+
+
+### Enunciado: ###
+
+*Crea un paquete de R (con dos o tres funciones tontas, que hagan cualquier cosa). Súbelo a GitHub. Se
+valorará que el paquete pueda ser instalado usando devtools.*
+
+
+
+### Resolución del ejercicio: ###
+
+
+Para la realización de este ejercicio he visitado varias URLs, son las siguientes:
+
+* Creación del paquete: Video: https://www.youtube.com/watch?v=9PyQlbAEujY#t=37
+* Sobre Github http://git-scm.com/book/es/v1/Fundamentos-de-Git-Guardando-cambios-en-el-repositorio , http://kbroman.org/pkg_primer/pages/github.html
+
+
+No creo que sea muy interesante explicar el proceso en detalle así que listaré en grandes rasgos los pasos: 
+
+* Creación del paquete con la última versión de Rstudio, mediante file -> new project -> new package...
+* Creación de una función de prueba en este caso cuadrado.
+* Relleno de los datos de descripción del paquete .
+* Relleno de los datos de ayuda del paquete y de la función.
+* Build del paquete.
+* Importación de la biuld creada a mi repositorio local de github.
+* Commit de estos datos.
+* Creación de carpeta en el repositorio remoto de Githhub.
+* Push del directorio local al remoto
+
+El repositorio en el que he dejado el paquete es: DiegoTestPackg, su url https://github.com/dpansan/PackageExample/tree/master/DiegoTestPackg
+
+Posteriormente para instalar el paquete desde Rstudio con devtools:
+
+```{r}
+library(devtools)
+#Instalación del paquete desde Github
+install_github("dpansan/PackageExample/DiegoTestPackg")
+
+#Ejecución de prueba para comprobar que es correcto
+#cuadrado(4)
+```
+
+

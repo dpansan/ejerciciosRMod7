@@ -1,0 +1,97 @@
+---
+title: "Ejercicio 5. RHadoop"
+author: "Diego Paniagua"
+date: "14/01/2015"
+output: html_document
+---
+
+### Enunciado: ###
+
+*Sube un subconjunto de datos del censo del ejercicio anterior (¿100k líneas?) a Hadoop y haz una tabulación
+de variables de tu interés del censo usando mapreduce.*
+
+
+
+### Resolución del ejercicio: ###
+
+
+He sacado 100.000 lineas aleatorias del fichero del censo para las comunidades de Extremadura, Valencia, Cataluña y las he guardado en data.csv para su procesado mediante Rhadoop.
+
+La extracción que he hecho desgracidamente está muy de moda, son los Doctorados en Ciencias que han tenido que buscarse la vida fuera de España, es decir los que trabajan o estudian en otro país.
+
+*NOTA: el fichero de datos ("MicrodatosCP_NV_per_bloque3.txt") no está incluído en el repositorio github por su gran tamaño.
+*NOTA 2: el codigo de este markdown se ha definido como no ejecutable porque en el rstudio no se instalaban correctamente los paquetes necesarios, pero el código está probado y funcionando en R.
+
+
+
+```{r eval=FALSE}
+
+#Cargo los paquetes
+library (rmr2)
+library(rhdfs)
+library(MicroDatosEs)
+setwd("/home/usuario/Dropbox/master/Modulo 7/ejercicios/")
+#Cargo el fichero de datos del censo para Extremadura, Valencia y Cataluña
+c.file<-("MicrodatosCP_NV_per_bloque3.txt")
+#Selecciono las variables que me interesan
+res <- censo2010(c.file, columns = c("cpro","factor","esreal","testud","ltraba"),summary = FALSE)
+#Lo paso a dataframe y me quedo con 100.000 lineas aleatorias
+df.censo=as.data.frame(res)
+salida<-df.censo[sample(nrow(df.censo), 100000), ]
+#Escribo el dataframe de 100.000 lineas resultante en el fichero data.csv
+write.csv(salida, file = "data.csv")
+
+#Inicializo el hdfs
+hdfs.init()
+#Cargo el fichero en una variable intermedia, con los strings de tipo string.
+filehadoop<-read.csv(file="data.csv",stringsAsFactors=FALSE)
+#Convierto en un tipo de dato entendible por hdfs el dataset que me interesa.
+datatodfs<-to.dfs(filehadoop[,2:6])
+
+#Función mapreduce
+
+res<-mapreduce(
+  #Como fuente la variable con el dataset entendible por hdfs
+  input =datatodfs,
+  #Map
+  map = function(k, v){
+    #Como key, la provincia
+    key = v$cpro
+    #Convierto los NA en strings para que no falle la comparación siguiente
+    v$esreal[is.na(v$esreal)]<-"NA"
+    v$testud[is.na(v$testud)]<-"NA"
+    v$ltraba[is.na(v$ltraba)]<-"NA"
+    #Dejo en la columna factor unicamente los registros que cumplan los requisitos: Doctorados en Ciencias que estudia o trabaja en otro pais
+    v$factor = ifelse(v$esreal == "Doctorado", 
+                      ifelse(v$testud == "Ciencias (Biología, Química, Física, Matemáticas, ...) e Informática (incluída Ingeniería Informática)",
+                             ifelse(v$ltraba == "En otro país", as.numeric(v$factor),0),0) ,0)
+                      
+    #Asigno al val el factor que ya he calculado                                                                       
+    val = v$factor
+    return(keyval(key, val))
+  },
+  #Reduce
+  reduce = function(k, v){
+    #La key sigue siendo la provincia, es la clave para agrupar en el reducer
+    key = k
+    #Como val la suma de los factor
+    val = sum(v)
+    return(keyval(key, val))
+  })
+
+#Convierto la salida en un data frame para mostrarlo. Al ser una muestra aleatoria de 100000 registros los resultados no tienen mucho sentido.
+as.data.frame(from.dfs(res))
+
+#Salida de ejemplo en R
+#                  key       val
+# 1             Girona  0.000000
+# 2             Lleida  0.000000
+# 3            Badajoz  0.000000
+# 4            Cáceres  0.000000
+# 5          Barcelona 50.147030
+# 6          Tarragona  0.000000
+# 7   Alicante/Alacant  9.332856
+# 8  Valencia/Valéncia  0.000000
+# 9 Castellón/Castelló 12.844806
+
+```

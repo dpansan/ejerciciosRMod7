@@ -1,0 +1,141 @@
+---
+title: "Ejercicio 2. JSON & XML."
+author: "Diego Paniagua"
+date: "12/01/2015"
+output: html_document
+---
+
+
+
+### Enunciado: ###
+
+*Busca un proveedor de datos via API que te interese. Descarga unos datos, procésalos y crea una pequeña
+historia a su derredor.
+Trata de que la obtención de los datos, etc. tenga su dificultad: se valorarán tanto el tratamiento de los datos
+como su interés o motivación.
+Hazlo reproduciblemente (¿con R Markdown?)*
+
+### Resolución del ejercicio: ###
+
+
+Para este ejercicio he usado la API del New Tork Times para recuperar las palabras mas frecuentes que aparecen junto a una palabra dada en los subtitulos de las noticias.
+
+Para tener acceso a esta API me he registrado en la web del diario y he recibido por mail una key que hay que pasar en la URL de la llamada a la API. Lo paso como parámetro.
+
+Mi idea inicial era mostrar la serie temporal de estas palabras, es decir la evolución a través de los años de las palabras relacionadas con la palabra dada, pero 
+la lentitud de recuperación de datos de la API ha hecho inviable esta tarea. 
+
+Los parámetros configurables del script son:
+-La palabra sobre la cual se quieren buscar las relacionadas en los subtítulos
+-El numero de páginas en la que buscará, cada página contiene 10 noticias, a mas páginas mas tiempo de procesamiento. Como ejemplo decir que en mi máquina el tiempo de procesamiento para una página es aproximadamente de 30 segundos.
+-El año para el cual se quieren buscar las noticias.
+-El numero de palabras frecuentes a mostrar (ordenadas por cantidad de apariciones)
+-La key proporcionada por NY Times.
+
+En este caso, y como ejemplo, con 1 pagina de resultados para la palabra "basketball" en el año 2008 obtenemos que las relacionadas son por orden de cantidad: knicks, points, leads...
+
+La idea con este ejercicio sería determinar relaciones frecuentes entre palabras y variaciones temporales de las mismas.
+
+Nota: para el conteo de palabras he utilizado un metodo encontrado en Google, en la siguiente url http://paddytherabbit.com/word-counts-individual-words-csv-file/
+
+Utiliza el paquete "tm". Me ha parecido muy interesante porque permite eliminar facilmente signos de puntuación y sobre todo palabras poco útiles (artículos, monosílabos) y en diferentes idiomas.
+
+```{r}
+
+
+library(rjson)
+library(tm)
+
+
+palabra<-"basketball" #La palabra sobre la cual se quieren buscar las relacionadas en los subtítulos
+paginas<-1 #El numero de páginas en la que buscará, cada página contiene 10 noticias, a mas páginas mas tiempo de procesamiento. Como ejemplo decir que en mi máquina el tiempo de procesamiento para una página es aproximadamente de 30 segundos.
+anio<-"2008" #El año para el cual se quieren buscar las noticias
+palabrasamostrar<-5 #El numero de palabras frecuentes a mostrar (ordenadas por cantidad de apariciones)
+apikey<-"911a3cf3af22b9c6f35496b96efad7b0:3:70642475" #Key facilitada por NYTimes para el uso de la API.
+
+#Monto una matriz con la cantidad de páquinas a buscar, para pasarelo a la API
+matriz<-matrix(c(1:paginas),nrow=1)
+#Monto la URL de la API pasándole los parámetros
+NYT.url <-apply(matriz, MARGIN=2, function(x)  {readLines(paste("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",palabra,"&facet_field=source&begin_date=",anio,"0101&end_date=",anio,"1231&page=",x,"&api-key=",apikey,sep=""))})
+#Obtengo el json
+NYT.json <- fromJSON(NYT.url)
+#La estructura del json devuelto es la siguiente
+#--
+# |-response
+# | |-meta
+# | ||-hits
+# | ||-time
+# | ||-offsets
+# | |-docs
+# | | |-web_url
+# | | |-snippet
+# | | |-lead_paragraph
+# | | |-abstract
+# | | |-print_page
+# | | |-blog
+# | | |-source
+# | | |-multimedia
+# | | |-headline
+# | | | |-main
+# | | |-keywords
+# | | | |-value
+# | | | |-is_major
+# | | | |-rank
+# | | | |-name
+# | | |-pub_date
+# | | |-document_type
+# | | |-news_desk
+# | | |-section_name
+# | | |-subsection_name
+# | | |-byline
+# | | | |-contributor
+# | | | |-person
+# | | | |-original
+# | | | |-organization
+# | | |-type_of_material
+# | | |-_id
+# | | |-word_count
+# | |-facets
+# |   |-source
+# |     |-terms
+# |       |-term
+# |       |-count
+# |-status
+# |-copyright
+
+
+
+
+#Paso el json a un dataframe
+articles.df = as.data.frame(do.call(rbind, NYT.json$response$docs))
+#Solo me interesa el subtítulo de la noticia
+articles.df.mod= articles.df[, c(3)]
+
+
+#http://paddytherabbit.com/word-counts-individual-words-csv-file/
+
+corpus <- Corpus(VectorSource(articles.df.mod)) # Crea el objeto corpus
+corpus <- tm_map(corpus, content_transformer(tolower)) # Lo pasa todo a minuscula
+corpus <- tm_map(corpus, mc.cores=1, removePunctuation) #Borra los simbolos de puntuación
+corpus <- tm_map(corpus, removeNumbers, mc.cores=1) #Borra los numeros
+corpus <- tm_map(corpus, removeWords, stopwords("english"),mc.cores=1) #Borra monosílabos y demás palabras "inútiles", en este caso en inglés.
+
+tdm <- TermDocumentMatrix(corpus)
+
+#Monta la matriz de palabras y apariciones 
+mydata.df <- as.data.frame(inspect(tdm))
+#Cuento la cantidad de veces totales que aparece cada palabra
+count<- as.data.frame(rowSums(mydata.df))
+#Alameceno las palabras
+count$word = rownames(count)
+#Renombro las columnas
+colnames(count) <- c("count","word" )
+#Ordeno en decreciente por cantidad de apariciones
+count<-count[order(count$count, decreasing=TRUE), ]
+#Elimino la palabra buscada de los resultados de busqueda
+count = count[count$word != palabra,]
+
+#Muestro la cantidad de palabras, según el parámetro pasado en palabrasamostrar
+head(count,n=palabrasamostrar)
+```
+

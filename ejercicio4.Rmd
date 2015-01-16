@@ -1,0 +1,185 @@
+---
+title: "Ejercicio 4. Plyr, dplyr y data.table."
+author: "Diego Paniagua"
+date: "12/01/2015"
+output: html_document
+---
+
+### Enunciado: ###
+
+*Descarga los microdatos del censo del 2011 de http://goo.gl/guhG1M. Puedes bajar el nacional o, si tienes
+problemas de memoria, alguno de los regionalizados. En esa página hay también información sobre las
+variables contenidas en el fichero y su formato. Puedes leerlo en R usando el paquete MicroDatosEs. Consulta
+la ayuda de la función censo2010.
+El ejercicio consiste en identificar algunas variables de tu interés y construir tablas por los indicadores que
+creas convenniente. Por ejemplo, población por sexo y grupo de edad en cada provincia. O proporción de
+viudos y viudas por tramo de edad y provincia. O. . .
+Eso sí: hazlo usando los dos paquetes dplyr y data.table (¿y reshape2?). Trata también con plyr. Añade
+un comentario sobre la velocidad relativa de los distintos paquetes para procesar los datos. ¿Cuál es tu
+favorito?
+Nota: Una columna muy importante en el censo es el factor de elevación. Para contar la población de España
+habria que hacer sum(factorel) donde factorel es el nombre que podría recibir esa columna. Hay un
+ejemplo práctico de cómo usar el factor de elevación en http://goo.gl/U6Ys8W.*
+
+
+### Resolución del ejercicio: ###
+
+Para comenzar este ejercicio, y según se sugiere en el enunciado, he utilizado el paquete MicroDatosEs. Me ha resultado muy util ya que al descargar el dataset con todas las variables mi máquina se sobrecargaba muchísimo. Además descargué solo uno de los ficheros de las comunidades por el mismo motivo (Extremadura, Valencia, Cataluña).
+
+Primero he cargado el dataset y he comprobado como funciona el factor de elevación.
+
+
+*NOTA: el fichero de datos ("MicrodatosCP_NV_per_bloque3.txt") no está incluído en el repositorio github por su gran tamaño.
+
+```{r}
+#Cargo el paquete
+library(MicroDatosEs)
+
+#Muestro la ayuda
+?censo2010
+
+#Cargo el fichero
+c.file<-("MicrodatosCP_NV_per_bloque3.txt")
+
+#No lo cargo completo en memoria, solo una serie de variables. Según lo visto en la excel Personas detallado_WEB.xls, las variables son
+#cpro: Provincia
+#ecivil: Estado civil
+#factor: factor de elevación
+#cale: si tienen calefaccion y su tipo
+#internet: si tienen internet 
+res <- censo2010(c.file, columns = c("cpro", "ecivil", "factor","cale","internet"), summary = FALSE)
+#Convierto el resultado en un data frame
+df.censo=as.data.frame(res)
+#summary(res)
+#head(res)
+
+#Calculo el número total de habitantes de las tres Comunidades Autonomas (Extremadura, Valencia, Cataluña)
+totalhab<-sum(factorel)
+               
+factorel <- df.censo$factor / 100    
+
+#Tanto por ciento que tienen internet en sus casas
+100 * sum( factorel * (df.censo$internet == "Sí") ) / sum( factorel )
+#Tanto por ciento que no tienen internet pero si caleffacion en sus casas
+100 * sum( factorel * (df.censo$internet == "No") * (df.censo$cale!="No tiene calefacción") )/ sum( factorel )
+#dplyr,data.table,y reshape2?,plyr
+```
+-----------------------------------
+
+
+Poseriormente he calculado el % de solteros que no tienen contratado internet en cada una de las comunidades, utilizando para ello los tres paquetes propuestos (data.table, Plyr y dplyr)
+
+
+Con Datatable: 
+
+
+```{r}
+
+###################################################
+#Datatable
+library(data.table)
+#Como ya tengo el dataframe con las columnas elegidas, en vez de usar fread, convierto el dataframe a datatable
+dt.censo<-data.table(df.censo,keep.rownames=TRUE)
+
+#Muestro tan solo las provincias con su numero de habitantes
+dt.censo.habprov.sum <- dt.censo[, list(tot=sum(factor)), by = c("cpro")]
+#Ordeno el dataset resultante por numero de habitantes
+dt.censo.habprov.sum[order(-rank(tot))]
+
+#Le añado una columna que muestra los habitantes por provincia
+dt.censo.habprov <- dt.censo[, habprov := sum(factor), by = c("cpro")]
+
+
+dt.censo.habprov [, c("cpro","ecivil","factor","habprov"), with = FALSE]
+
+#Hallo la clasificacion de % de solteros sin internet por provincia
+dt.censo.habprov.solterossininternet <- dt.censo.habprov[ecivil == "Soltero" & internet=="No",list(tot=sum(factor)/max(habprov)*100) , by = c("cpro","ecivil","internet")]
+dt.porc.solterossininternet.provincias<-dt.censo.habprov.solterossininternet  [order(ecivil,internet,(-tot))] [, c("cpro","tot"), with = FALSE]
+dt.porc.solterossininternet.provincias
+
+#En una sola instruccion, para medir el tiempo
+system.time(dt.censo.habprov[ecivil == "Soltero" & internet=="No",list(tot=sum(factor)/max(habprov)*100) , by = c("cpro","ecivil","internet")] [
+  order(ecivil,internet,(-tot))] [, c("cpro","tot"), with = FALSE])
+```
+
+
+Con Plyr:
+
+```{r}
+##################################################
+#Plyr
+library(plyr)
+#Usamos el dataframe df.censo
+#Muestro tan solo las provincias con su numero de habitantes
+pl.censo<-df.censo
+pl.censo.habprov.sum <- ddply(pl.censo, c("cpro"), summarize, tot = sum(factor))
+#Ordeno el dataset resultante por numero de habitantes
+arrange(pl.censo.habprov.sum, -rank(tot))
+
+
+#Le añado una columna que muestra los habitantes por provincia
+pl.censo.habprov<-ddply(pl.censo,c("cpro"), transform, habprov=sum(factor))
+
+
+#Hallo la clasificacion de % de solteros sin internet por provincia
+pl.censo.habprov.solterossininternet<- ddply(subset(pl.censo.habprov, ecivil == "Soltero" & internet=="No"), c("cpro","ecivil","internet"), summarise 
+                                             ,tot=sum(factor)/max(habprov)*100)
+pl.porc.solterossininternet.provincias<- arrange(pl.censo.habprov.solterossininternet,(-tot)) [,c(1,4)]
+pl.porc.solterossininternet.provincias
+
+#En una sola instruccion, para medir el tiempo
+system.time(arrange(ddply(subset(pl.censo.habprov, ecivil == "Soltero" & internet=="No"), c("cpro","ecivil","internet"), summarise 
+              ,tot=sum(factor)/max(habprov)*100),(-tot)) [,c(1,4)])
+```
+
+
+
+Con Dplyr:
+
+```{r}
+##################################################
+#Dplyr
+library(dplyr)
+#Usamos el dataframe df.censo
+#Muestro tan solo las provincias con su numero de habitantes
+dpl.censo<-df.censo
+dpl.censo.habprov.sum <- dpl.censo %>% 
+                         group_by(cpro) %>% 
+                         summarise(tot = sum(factor)) %>%
+                         select(cpro, tot)
+#Ordeno el dataset resultante por numero de habitantes
+dpl.censo.habprov.sum %>% 
+  arrange(-tot) 
+
+#Le añado una columna que muestra los habitantes por provincia
+dpl.censo.habprov <- dpl.censo %>% 
+                    group_by(cpro) %>% 
+                    mutate(habprov = sum(factor))
+
+
+#Hallo la clasificacion de % de solteros sin internet por provincia
+dpl.censo.habprov.solterossininternet <- dpl.censo.habprov %>% 
+                                          filter(ecivil == "Soltero" , internet=="No") %>%
+                                          group_by(cpro,ecivil,internet) %>% 
+                                          summarise(tot=sum(factor)/max(habprov)*100) 
+
+dpl.porc.solterossininternet.provincias<-dpl.censo.habprov.solterossininternet %>%
+                                         ungroup %>%
+                                         arrange(-tot)  %>%
+                                         select (1,4)
+
+dpl.porc.solterossininternet.provincias
+
+#En una sola instruccion, para medir el tiempo
+system.time(dpl.censo.habprov %>% 
+            filter(ecivil == "Soltero" , internet=="No") %>%
+            group_by(cpro,ecivil,internet) %>% 
+            summarise(tot=sum(factor)/max(habprov)*100)  %>%  
+            ungroup %>%
+            arrange(-tot)  %>%
+            select (1,4))
+
+
+```
+
+Como vemos los tiempos son menores con datatable, dplyr le sigue de cerca y plyr tarda un poquito mas. En mi caso me siento mas cómodo trabajando con Dplyr porque la notación me parece mas intuitiva, la razón de esto puede ser que tyengo bastante experiencia con SQL y se asemeja bastante, aunque la verdad que el tema del ungroup me ha dado un par de quebraderos de cabeza.
